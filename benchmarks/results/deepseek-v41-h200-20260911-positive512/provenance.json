@@ -1,0 +1,38 @@
+{
+  "date_utc": "2026-09-11",
+  "pull_request": "https://github.com/vllm-project/vllm/pull/56220",
+  "tested_head_both_arms": "2ae34345ee5919130a6a08fe91f969d174b8b69e",
+  "native_base": "c9d909e802a39292f54101bff8a36096761ea605",
+  "model": "deepseek-ai/DeepSeek-V4.1-Flash",
+  "model_revision": "df42c109f1defefcbfcedbe7d905718a12266e40",
+  "hardware": "4 x NVIDIA H200 NVL, PCIe Gen5 x16; observed SYS/NODE links, no NVLink",
+  "runtime": {
+    "torch": "2.13.0+cu130",
+    "flashinfer": "0.6.18.post1",
+    "loaded_nccl": "2.30.7",
+    "loaded_nccl_sha256": "618968ee277041751512e619190132a9bdf351c3ce7129c73484f6ef441ad692"
+  },
+  "runtime_manifest_sha256": "e1ba9580b3cf134b77cefef61dd1fa4a8f3f373f52dad51a55c578de7cb49777",
+  "checkpoint_receipt_sha256": "9cc1cc8e40c85dba795db11d9fced951883181490d6126d8aa29b4fce550207e",
+  "parallelism": {
+    "tp": 4,
+    "pp": 1,
+    "dp": 1,
+    "ep": true
+  },
+  "mode": "eager V1 runner",
+  "engram_cpu_offload": true,
+  "generic_cpu_offload_gib": 0,
+  "prefix_cache": "enabled; reset before workload, followed by 4 warmup requests",
+  "actual_kv_blocks_per_worker_both_arms": 541152,
+  "comparison": "Same PR head; lookup_overlap false versus true",
+  "selection": "Only the workload with a positive observed throughput change is published here. This is not the complete workload matrix.",
+  "qualification": "One A/B pair; screening result, no statistically established or general E2E speedup claim.",
+  "correctness_limitation": "Separate same-head checks matched 256 serial generated tokens and 6 fixed-prefix one-token probes; one of four concurrent responses diverged at the fifth generated token. No A/A repeat was run; cause remains unresolved.",
+  "original_benchmark_json_sha256": {
+    "off": "f05199e53d6a213fdad7860f5826a5c1e9bb5856d815df33ac932d20bd9fdcc2",
+    "on": "972bdf27a293e5891c8796f40245b78f6badd812a7d1c019d80723078a8c859f"
+  },
+  "public_json_transformation": "Only generated_texts removed; all recorded timing, lengths, errors and aggregate metrics retained.",
+  "output_throughput_change_percent": 2.208122180962291
+}
