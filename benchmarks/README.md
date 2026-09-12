@@ -18,3 +18,8 @@ For full CLI reference see:
 - <https://docs.vllm.ai/en/latest/cli/bench/latency.html>
 - <https://docs.vllm.ai/en/latest/cli/bench/serve.html>
 - <https://docs.vllm.ai/en/latest/cli/bench/throughput.html>
+
+## Complete response equivalence
+
+For fixed, non-streaming eager/Graph correctness cohorts, see
+[the response equivalence benchmark](response_equivalence.md).
