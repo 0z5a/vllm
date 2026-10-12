@@ -135,6 +135,17 @@ class FlashInferEPHTPrepareAndFinalize(FlashInferEPPrepareAndFinalizeBase):
         # re-tags -1 (skipped by the experts).
         recv_idx = d.recv_topk_idx
         recv_w = d.recv_topk_weights
+        actual = int(recv_total.item())
+        if not 0 <= actual <= self._num_recv_full:
+            raise RuntimeError("FlashInfer EP received-token count is out of bounds")
+        if actual < self._num_recv_full:
+            # Dispatch only initializes received rows, including when actual is zero.
+            padding = (
+                torch.arange(self._num_recv_full, device=recv_idx.device).unsqueeze(1)
+                >= actual
+            )
+            recv_idx = recv_idx.masked_fill(padding, -1)
+            recv_w = recv_w.masked_fill(padding, 0)
         if expert_map is not None:
             # The local->global mapping is static for this layer; cache it (the
             # nonzero() calls each force a device sync, twice per layer per step).
@@ -166,7 +177,6 @@ class FlashInferEPHTPrepareAndFinalize(FlashInferEPPrepareAndFinalizeBase):
         # buffer. recv_total was written by the HT metadata step at create_handle;
         # .item() is a host sync — eager-only, matching this path (the
         # nccl.ep HT combine below still gets the full static buffer).
-        actual = int(recv_total.item())
         m = self._num_recv_full
         if actual < m:
             # Round up for allocator/kernel-config stability; padded rows within
