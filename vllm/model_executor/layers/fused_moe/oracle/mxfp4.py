@@ -433,10 +433,17 @@ def _get_priority_backends_for_gpt_oss() -> list[Mxfp4MoeBackend]:
     return prioritize_humming(_AVAILABLE_BACKENDS)
 
 
-def _get_priority_backends() -> list[Mxfp4MoeBackend]:
+def _get_priority_backends(prefer_humming: bool = True) -> list[Mxfp4MoeBackend]:
     """Get available backends in priority order. SM100+ prefers DeepGEMM FP4 /
     TRTLLM MXFP8; SM90 falls through to Humming or Marlin (the
     backend-level ``is_supported_config`` check filters by device capability).
+
+    Args:
+        prefer_humming: Move Humming ahead of Marlin where the device prefers
+            Humming. Under expert parallelism Humming runs grouped GEMMs over
+            every local expert, while Marlin only visits experts that received
+            tokens, so callers pass False there.
+
     """
     if current_platform.is_rocm():
         return [
@@ -457,6 +464,8 @@ def _get_priority_backends() -> list[Mxfp4MoeBackend]:
         Mxfp4MoeBackend.BATCHED_MARLIN,
         Mxfp4MoeBackend.HUMMING,
     ]
+    if not prefer_humming:
+        return _AVAILABLE_BACKENDS
     return prioritize_humming(_AVAILABLE_BACKENDS)
 
 
@@ -805,7 +814,9 @@ def select_deepseek_v4_mxfp4_moe_backend(
             Mxfp4MoeBackend.TRITON_UNFUSED,
         ]
     else:
-        priority_backends = _get_priority_backends()
+        priority_backends = _get_priority_backends(
+            prefer_humming=not config.moe_parallel_config.use_ep
+        )
 
     # Iterate priority backends: TRTLLM MXFP8, then Triton.
     for backend in priority_backends:
