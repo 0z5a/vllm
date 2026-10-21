@@ -324,6 +324,10 @@ if TYPE_CHECKING:
     VLLM_ELASTIC_EP_SCALE_UP_LAUNCH: bool = False
     VLLM_ELASTIC_EP_DRAIN_REQUESTS: bool = False
     VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: bool = True
+    VLLM_NIXL_EP_MAX_NUM_RANKS: int = 32
+    VLLM_FLASHINFER_EP_TRANSPORT: str = "nccl_ep"
+    VLLM_FLASHINFER_EP_FAULT_TOLERANCE: bool = False
+    VLLM_FLASHINFER_EP_TIMEOUT_MS: int = 0
     VLLM_XPU_FORCE_N_CONTIG_WEIGHT: bool = False
     VLLM_XPU_USE_SAMPLER_KERNEL: bool = True
     VLLM_XPU_INC_WNA16_BACKEND: Literal["auto", "ark", "w4a16", "w4a8"] = "auto"
@@ -2203,6 +2207,30 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # memory allocation. Enabled by default as of v0.21.0
     "VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS": lambda: bool(
         int(os.getenv("VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS", "1"))
+    ),
+    # NIXL EP environment variables
+    "VLLM_NIXL_EP_MAX_NUM_RANKS": lambda: int(
+        os.getenv("VLLM_NIXL_EP_MAX_NUM_RANKS", "32")
+    ),
+    # Transport backing the flashinfer.moe_ep all2all backends: "nccl_ep"
+    # (default) or "nixl_ep". This is a sub-configuration of
+    # --all2all-backend flashinfer_ep_low_latency, not a backend of its own:
+    # moe_ep presents one API over both. "nixl_ep" is low-latency only.
+    "VLLM_FLASHINFER_EP_TRANSPORT": lambda: os.getenv(
+        "VLLM_FLASHINFER_EP_TRANSPORT", "nccl_ep"
+    ),
+    # Enable FlashInfer EP rank masking, so a dead/slow EP peer is skipped
+    # instead of tripping a GPU trap that kills the job. Low-latency
+    # transports only; ignored unless the backend can actually serve it
+    # (see has_flashinfer_moe_ep_fault_tolerance).
+    "VLLM_FLASHINFER_EP_FAULT_TOLERANCE": lambda: bool(
+        int(os.getenv("VLLM_FLASHINFER_EP_FAULT_TOLERANCE", "0"))
+    ),
+    # GPU wait-loop timeout, in ms, before a peer is considered failed.
+    # 0 keeps the transport default (~100s nccl_ep / 30s nixl_ep). Setting
+    # this too low marks merely-slow ranks dead.
+    "VLLM_FLASHINFER_EP_TIMEOUT_MS": lambda: int(
+        os.getenv("VLLM_FLASHINFER_EP_TIMEOUT_MS", "0")
     ),
     # Force N-contiguous weight layout for all XPU unquantized linears.
     "VLLM_XPU_FORCE_N_CONTIG_WEIGHT": lambda: bool(

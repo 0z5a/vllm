@@ -412,6 +412,45 @@ def has_flashinfer_moe() -> bool:
 
 
 @functools.cache
+def has_flashinfer_moe_ep(transport: str = "nccl_ep") -> bool:
+    """Return `True` if FlashInfer MoE expert-parallel is available.
+
+    Requires both the `flashinfer.moe_ep` package AND a built transport
+    backend: `nccl_ep` (from the nccl4py wheel, `BUILD_NCCL_EP=1`) or
+    `nixl_ep` (in-tree meson build, `BUILD_NIXL_EP=1`). Without the
+    corresponding build, `available_backends()` will not list `transport`.
+    """
+    if not has_flashinfer():
+        return False
+    if importlib.util.find_spec("flashinfer.moe_ep") is None:
+        return False
+
+    from flashinfer.moe_ep import available_backends
+
+    return transport in available_backends()
+
+
+def has_flashinfer_moe_ep_fault_tolerance(transport: str = "nccl_ep") -> bool:
+    """Return `True` if `transport` can serve FlashInfer's EP rank-mask API.
+
+    Strictly stronger than `has_flashinfer_moe_ep`: rank masking additionally
+    needs runtime support that a merely-built backend may lack. For `nccl_ep`
+    that is an nccl4py whose `GroupConfig` carries `enable_mask` plus a
+    `libnccl_ep` exporting the `ncclEpMask*` symbols; `nixl_ep` allocates its
+    mask buffer unconditionally.
+
+    `supports_fault_tolerance` itself never raises -- it reports `False` rather
+    than propagating a probe failure -- so no guard is needed here.
+    """
+    if not has_flashinfer_moe_ep(transport):
+        return False
+
+    from flashinfer.moe_ep import supports_fault_tolerance
+
+    return bool(supports_fault_tolerance(transport))
+
+
+@functools.cache
 def has_flashinfer_sm90_nope_mla() -> bool:
     """FlashInfer SM90 NoPE MLA (FP8 KV with in-kernel dequant, kpe=0).
 
@@ -1269,6 +1308,7 @@ __all__ = [
     "flashinfer_fused_kda_decode",
     "autotune",
     "has_flashinfer_moe",
+    "has_flashinfer_moe_ep",
     "has_flashinfer_comm",
     "has_flashinfer_nvlink_two_sided",
     "has_flashinfer_nvlink_one_sided",
