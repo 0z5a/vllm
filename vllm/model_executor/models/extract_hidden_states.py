@@ -45,8 +45,7 @@ def unified_kv_cache_update(
     to_cache: torch.Tensor,
     layer_name: str,
 ) -> torch.Tensor:
-    """
-    Returns a dummy that is passed to unified_attention to signal a side effect and
+    """Returns a dummy that is passed to unified_attention to signal a side effect and
     the data dependency between them to ensure torch.compile preserves ordering.
     """
     forward_context = get_forward_context()
@@ -127,10 +126,6 @@ class CacheOnlyAttentionBackend(AttentionBackend):
     def get_builder_cls() -> type["CacheOnlyAttentionMetadataBuilder"]:
         return CacheOnlyAttentionMetadataBuilder
 
-    @staticmethod
-    def use_cascade_attention(*args, **kwargs) -> bool:
-        return False
-
     @classmethod
     def get_supported_head_sizes(cls) -> list[int]:
         return []
@@ -159,11 +154,6 @@ class CacheOnlyAttentionMetadataBuilder(
         common_attn_metadata: CommonAttentionMetadata,
         fast_build: bool = False,
     ) -> CacheOnlyAttentionMetadata:
-        use_cascade = common_prefix_len > 0
-        if use_cascade:
-            raise NotImplementedError(
-                "Cascade attention not supported by CacheOnlyAttention"
-            )
         causal = common_attn_metadata.causal
         if not causal:
             raise NotImplementedError(
@@ -231,7 +221,7 @@ class CacheOnlyAttentionLayer(nn.Module, AttentionLayerBase):
         head_size: int,
         cache_config: CacheConfig | None = None,
         prefix: str = "",
-        attn_type: str = AttentionType.DECODER,
+        attn_type: AttentionType = AttentionType.DECODER,
     ):
         super().__init__()
 
@@ -294,6 +284,7 @@ class CacheOnlyAttentionLayer(nn.Module, AttentionLayerBase):
 
         Returns:
             Dummy output tensor (not used)
+
         """
         # Note: we set num_heads to num_hidden_layers and
         # head_size to hidden_size for hidden states storage
@@ -329,7 +320,9 @@ class ExtractHiddenStatesModel(nn.Module):
         super().__init__()
 
         self.vllm_config = vllm_config
-        self.hf_config = vllm_config.speculative_config.draft_model_config.hf_config
+        speculative_config = vllm_config.speculative_config
+        assert speculative_config is not None
+        self.hf_config = speculative_config.draft_model_config.hf_config
         self.hidden_size = vllm_config.model_config.get_hidden_size()
         self.target_num_hidden_layers = (
             vllm_config.model_config.get_total_num_hidden_layers()
@@ -371,8 +364,8 @@ class ExtractHiddenStatesModel(nn.Module):
 
         Returns:
             Tuple of (dummy_output, dummy_output) - both unused
-        """
 
+        """
         # Call dummy attention layer to cache hidden states
         # Output is ignored - we only care about the KV cache side effects
         _ = self.cache_only_layers[str(self.target_num_hidden_layers)](hidden_states)
