@@ -500,6 +500,30 @@ def test_deepseek_v4_flashinfer_cutlass_falls_through_to_w4a8(
     assert experts_cls is FlashInferExperts
 
 
+@pytest.mark.parametrize("use_ep", [False, True])
+def test_deepseek_v4_auto_order_keeps_marlin_ahead_of_humming_under_ep(
+    monkeypatch: pytest.MonkeyPatch,
+    use_ep: bool,
+) -> None:
+    """Under EP Humming runs grouped GEMMs over every local expert, so the
+    DeepSeek-V4 auto order must not move Humming ahead of Marlin."""
+    requested = []
+
+    def priority_backends(prefer_humming: bool = True) -> list[Mxfp4MoeBackend]:
+        requested.append(prefer_humming)
+        return []
+
+    monkeypatch.setattr(mxfp4_oracle, "_get_priority_backends", priority_backends)
+    monkeypatch.setattr(mxfp4_oracle.current_platform, "is_rocm", lambda: False)
+    config = make_dummy_moe_config(hidden_dim=256, intermediate_size=64)
+    config.moe_parallel_config.use_ep = use_ep
+
+    with pytest.raises(NotImplementedError):
+        select_deepseek_v4_mxfp4_moe_backend(config)
+
+    assert requested == [not use_ep]
+
+
 def test_compressed_tensors_mxfp4_preserves_checkpoint_packing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
