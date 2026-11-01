@@ -18,6 +18,7 @@ import pytest
 import requests
 
 from tests.utils import RemoteOpenAIServer, multi_gpu_test
+from vllm.utils.flashinfer import has_flashinfer_moe_ep
 from vllm.utils.import_utils import has_nixl_ep
 from vllm.utils.network_utils import get_open_port
 
@@ -126,7 +127,15 @@ def _install_fault_injection(monkeypatch, tmp_path, rank: int) -> None:
     monkeypatch.setenv("VLLM_SERVER_DEV_MODE", "1")
 
 
-def _ft_server_args(extra_args: list[str] | None = None) -> list[str]:
+# FT-capable all2all backends, gated on what this build actually provides.
+FT_BACKENDS = ["nixl_ep"] if has_nixl_ep() else []
+if has_flashinfer_moe_ep("nccl_ep"):
+    FT_BACKENDS.append("flashinfer_ep_low_latency")
+
+
+def _ft_server_args(
+    extra_args: list[str] | None = None, backend: str = "nixl_ep"
+) -> list[str]:
     return [
         "--enforce-eager",
         "--dtype",
@@ -137,7 +146,7 @@ def _ft_server_args(extra_args: list[str] | None = None) -> list[str]:
         "128",
         "--enable-expert-parallel",
         "--all2all-backend",
-        "nixl_ep",
+        backend,
         "--enable-fault-tolerance",
         "--cpu-distributed-timeout-seconds",
         str(CPU_DISTRIBUTED_TIMEOUT_S),
@@ -147,7 +156,11 @@ def _ft_server_args(extra_args: list[str] | None = None) -> list[str]:
     ]
 
 
-def _ft_manager(extra_args: list[str] | None = None, dp_size: int = 2):
+def _ft_manager(
+    extra_args: list[str] | None = None,
+    dp_size: int = 2,
+    backend: str = "nixl_ep",
+):
     """Build the shared DP+EP fault-tolerant server topology (one engine/server)."""
     from tests.v1.distributed.test_external_lb_dp import ExternalLBServerManager
 
@@ -155,7 +168,7 @@ def _ft_manager(extra_args: list[str] | None = None, dp_size: int = 2):
         MODEL_NAME,
         dp_size,
         api_server_count=1,  # FT requires a single API server per engine
-        base_server_args=_ft_server_args(extra_args),
+        base_server_args=_ft_server_args(extra_args, backend),
         tp_size=1,
     )
 
@@ -374,9 +387,10 @@ def _drive_to_faulted(
     return faulted
 
 
-@pytest.mark.skipif(not has_nixl_ep(), reason="Requires nixl_ep all2all backend")
+@pytest.mark.skipif(not FT_BACKENDS, reason="No FT-capable all2all backend built")
+@pytest.mark.parametrize("ft_backend", FT_BACKENDS)
 @multi_gpu_test(num_gpus=2)
-def test_injected_fault_retry_recovers_all_ranks(monkeypatch, tmp_path):
+def test_injected_fault_retry_recovers_all_ranks(ft_backend, monkeypatch, tmp_path):
     """An exception injected into the inference path drives full retry recovery.
 
     The fault is patched into ``sync_cudagraph_and_dp_padding`` on rank 1 via
@@ -391,7 +405,7 @@ def test_injected_fault_retry_recovers_all_ranks(monkeypatch, tmp_path):
     _install_fault_injection(monkeypatch, tmp_path, rank=1)
     dp_size = 2
     faulted_rank = 1
-    with _ft_manager(dp_size=dp_size) as servers:
+    with _ft_manager(dp_size=dp_size, backend=ft_backend) as servers:
         assert len(servers) == dp_size
         servers_by_rank = _servers_by_rank(servers, dp_size)
 
